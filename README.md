@@ -11,8 +11,7 @@ This project performs Time Series Decomposition on network traffic data to analy
 - Jupyter Notebook
 
 ## All Project Files in one repo
-- EXP-1.ipynb - Complete implementation
-- output1.csv - Processed dataset
+
 
 ## Results
 The project visualizes:
