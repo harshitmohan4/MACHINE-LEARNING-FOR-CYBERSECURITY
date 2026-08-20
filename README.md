@@ -10,7 +10,7 @@ This project performs Time Series Decomposition on network traffic data to analy
 - Statsmodels
 - Jupyter Notebook
 
-## Project Files
+## All Project Files in one repo
 - EXP-1.ipynb - Complete implementation
 - output1.csv - Processed dataset
 
