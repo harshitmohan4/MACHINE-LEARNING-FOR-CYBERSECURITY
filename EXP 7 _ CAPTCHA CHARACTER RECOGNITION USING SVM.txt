@@ -1,0 +1,634 @@
+# ============================================================
+# EXPERIMENT: CAPTCHA CHARACTER RECOGNITION USING SVM
+# ============================================================
+
+# -----------------------------
+# Step 1: Import Libraries
+# -----------------------------
+
+import os
+import string
+import random
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import joblib
+
+from PIL import Image, ImageDraw, ImageFont
+
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import SVC
+from sklearn.metrics import (
+    accuracy_score,
+    confusion_matrix,
+    classification_report
+)
+
+
+# -----------------------------
+# Step 2: Set Random Seed
+# -----------------------------
+
+random.seed(42)
+np.random.seed(42)
+
+
+# -----------------------------
+# Step 3: Dataset Settings
+# -----------------------------
+
+DATASET_PATH = "captcha_dataset"
+
+# CAPTCHA characters
+CHARACTERS = string.ascii_uppercase + string.digits
+
+# Image size
+IMAGE_WIDTH = 40
+IMAGE_HEIGHT = 50
+
+# Number of images per character
+SAMPLES_PER_CLASS = 30
+
+# Create dataset folder
+os.makedirs(DATASET_PATH, exist_ok=True)
+
+
+# -----------------------------
+# Step 4: Load Font
+# -----------------------------
+
+font_paths = [
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf"
+]
+
+font_path = None
+
+for path in font_paths:
+    if os.path.exists(path):
+        font_path = path
+        break
+
+if font_path:
+    font = ImageFont.truetype(font_path, 34)
+else:
+    font = ImageFont.load_default()
+
+
+# -----------------------------
+# Step 5: Create CAPTCHA Images
+# -----------------------------
+
+def create_character_image(character):
+
+    image = Image.new(
+        "L",
+        (IMAGE_WIDTH, IMAGE_HEIGHT),
+        255
+    )
+
+    draw = ImageDraw.Draw(image)
+
+    # Get character size
+    box = draw.textbbox(
+        (0, 0),
+        character,
+        font=font
+    )
+
+    text_width = box[2] - box[0]
+    text_height = box[3] - box[1]
+
+    # Random position
+    x = (IMAGE_WIDTH - text_width) // 2
+    y = (IMAGE_HEIGHT - text_height) // 2 - 5
+
+    x += random.randint(-2, 2)
+    y += random.randint(-2, 2)
+
+    # Draw character
+    draw.text(
+        (x, y),
+        character,
+        font=font,
+        fill=random.randint(0, 70)
+    )
+
+    # Rotate image slightly
+    angle = random.uniform(-8, 8)
+
+    image = image.rotate(
+        angle,
+        fillcolor=255
+    )
+
+    return image
+
+
+# -----------------------------
+# Step 6: Generate Dataset
+# -----------------------------
+
+dataset = []
+
+for character in CHARACTERS:
+
+    character_folder = os.path.join(
+        DATASET_PATH,
+        character
+    )
+
+    os.makedirs(
+        character_folder,
+        exist_ok=True
+    )
+
+    for i in range(SAMPLES_PER_CLASS):
+
+        image = create_character_image(character)
+
+        filename = f"{character}_{i}.png"
+
+        filepath = os.path.join(
+            character_folder,
+            filename
+        )
+
+        image.save(filepath)
+
+        dataset.append({
+            "file": filepath,
+            "label": character
+        })
+
+
+dataset_df = pd.DataFrame(dataset)
+
+
+print("CAPTCHA Dataset Created Successfully")
+print("--------------------------------------")
+
+print("Total Images:",
+      len(dataset_df))
+
+print("Total Classes:",
+      dataset_df["label"].nunique())
+
+print("\nCharacters:")
+
+print(
+    " ".join(
+        sorted(dataset_df["label"].unique())
+    )
+)
+
+
+# -----------------------------
+# Step 7: Display Sample Images
+# -----------------------------
+
+sample_data = dataset_df.sample(
+    12,
+    random_state=42
+)
+
+plt.figure(figsize=(10, 6))
+
+for i, (_, row) in enumerate(sample_data.iterrows()):
+
+    image = Image.open(
+        row["file"]
+    )
+
+    plt.subplot(3, 4, i + 1)
+
+    plt.imshow(
+        image,
+        cmap="gray"
+    )
+
+    plt.title(
+        "Character: " + row["label"]
+    )
+
+    plt.axis("off")
+
+plt.tight_layout()
+
+plt.show()
+
+
+# -----------------------------
+# Step 8: Feature Extraction
+# -----------------------------
+
+X = []
+y = []
+
+for _, row in dataset_df.iterrows():
+
+    image = Image.open(
+        row["file"]
+    ).convert("L")
+
+    # Convert image to NumPy array
+    image_array = np.asarray(
+        image,
+        dtype=np.float32
+    )
+
+    # Normalize pixel values
+    image_array = image_array / 255.0
+
+    # Flatten image into feature vector
+    features = image_array.flatten()
+
+    X.append(features)
+
+    y.append(row["label"])
+
+
+X = np.array(X)
+y = np.array(y)
+
+
+print("\nFeature Extraction Completed")
+print("----------------------------")
+
+print("Feature Matrix Shape:",
+      X.shape)
+
+print("Labels Shape:",
+      y.shape)
+
+
+# -----------------------------
+# Step 9: Split Dataset
+# -----------------------------
+
+X_train, X_test, y_train, y_test = train_test_split(
+
+    X,
+    y,
+
+    test_size=0.20,
+
+    random_state=42,
+
+    stratify=y
+)
+
+
+print("\nDataset Split")
+print("-------------")
+
+print("Training Samples:",
+      len(X_train))
+
+print("Testing Samples:",
+      len(X_test))
+
+
+# -----------------------------
+# Step 10: Create SVM Model
+# -----------------------------
+
+model = make_pipeline(
+
+    StandardScaler(),
+
+    SVC(
+        kernel="rbf",
+        C=10,
+        gamma="scale"
+    )
+)
+
+
+# -----------------------------
+# Step 11: Train Model
+# -----------------------------
+
+print("\nTraining SVM Model...")
+
+model.fit(
+    X_train,
+    y_train
+)
+
+print("Training Completed!")
+
+
+# -----------------------------
+# Step 12: Make Predictions
+# -----------------------------
+
+y_pred = model.predict(
+    X_test
+)
+
+
+# -----------------------------
+# Step 13: Calculate Accuracy
+# -----------------------------
+
+accuracy = accuracy_score(
+    y_test,
+    y_pred
+)
+
+
+print("\n==============================")
+print("MODEL PERFORMANCE")
+print("==============================")
+
+print(
+    f"Accuracy: {accuracy * 100:.2f}%"
+)
+
+
+# -----------------------------
+# Step 14: Confusion Matrix
+# -----------------------------
+
+cm = confusion_matrix(
+    y_test,
+    y_pred,
+    labels=CHARACTERS
+)
+
+plt.figure(figsize=(12, 10))
+
+plt.imshow(cm)
+
+plt.title(
+    "Confusion Matrix - SVM CAPTCHA Classifier"
+)
+
+plt.xlabel(
+    "Predicted Character"
+)
+
+plt.ylabel(
+    "Actual Character"
+)
+
+plt.colorbar()
+
+plt.xticks(
+    range(len(CHARACTERS)),
+    CHARACTERS,
+    rotation=90
+)
+
+plt.yticks(
+    range(len(CHARACTERS)),
+    CHARACTERS
+)
+
+plt.tight_layout()
+
+plt.show()
+
+
+# -----------------------------
+# Step 15: Classification Report
+# -----------------------------
+
+print("\nClassification Report")
+print("---------------------")
+
+print(
+    classification_report(
+        y_test,
+        y_pred,
+        zero_division=0
+    )
+)
+
+
+# -----------------------------
+# Step 16: Test Individual
+#           Character Predictions
+# -----------------------------
+
+print("\nSample Predictions")
+print("------------------")
+
+sample_indices = np.random.choice(
+    len(X_test),
+    10,
+    replace=False
+)
+
+for index in sample_indices:
+
+    actual = y_test[index]
+
+    predicted = y_pred[index]
+
+    print(
+        f"Actual: {actual}  "
+        f"Predicted: {predicted}"
+    )
+
+
+# -----------------------------
+# Step 17: Create a CAPTCHA
+# -----------------------------
+
+def create_captcha(text):
+
+    gap = 5
+
+    width = (
+        len(text) * IMAGE_WIDTH
+        + (len(text) - 1) * gap
+    )
+
+    captcha = Image.new(
+        "L",
+        (width, IMAGE_HEIGHT),
+        255
+    )
+
+    for i, character in enumerate(text):
+
+        character_image = (
+            create_character_image(character)
+        )
+
+        x_position = i * (
+            IMAGE_WIDTH + gap
+        )
+
+        captcha.paste(
+            character_image,
+            (x_position, 0)
+        )
+
+    return captcha
+
+
+# -----------------------------
+# Step 18: Test New CAPTCHA
+# -----------------------------
+
+actual_captcha = "A7K9"
+
+captcha_image = create_captcha(
+    actual_captcha
+)
+
+
+# -----------------------------
+# Step 19: Predict CAPTCHA
+# -----------------------------
+
+predicted_characters = []
+
+gap = 5
+
+for i in range(
+    len(actual_captcha)
+):
+
+    x_position = i * (
+        IMAGE_WIDTH + gap
+    )
+
+    # Extract individual character
+    character_image = captcha_image.crop(
+
+        (
+            x_position,
+            0,
+
+            x_position + IMAGE_WIDTH,
+            IMAGE_HEIGHT
+        )
+    )
+
+    # Convert to array
+    image_array = np.asarray(
+        character_image,
+        dtype=np.float32
+    )
+
+    # Normalize
+    image_array = (
+        image_array / 255.0
+    )
+
+    # Flatten
+    features = image_array.flatten()
+
+    # Predict
+    prediction = model.predict(
+        features.reshape(1, -1)
+    )
+
+    predicted_characters.append(
+        prediction[0]
+    )
+
+
+predicted_captcha = "".join(
+    predicted_characters
+)
+
+
+# -----------------------------
+# Step 20: Display CAPTCHA
+# -----------------------------
+
+plt.figure(figsize=(8, 2))
+
+plt.imshow(
+    captcha_image,
+    cmap="gray"
+)
+
+plt.title(
+    f"Actual: {actual_captcha} | "
+    f"Predicted: {predicted_captcha}"
+)
+
+plt.axis("off")
+
+plt.show()
+
+
+# -----------------------------
+# Step 21: Final Result
+# -----------------------------
+
+print("\n==============================")
+print("CAPTCHA RECOGNITION RESULT")
+print("==============================")
+
+print(
+    "Actual CAPTCHA    :",
+    actual_captcha
+)
+
+print(
+    "Predicted CAPTCHA :",
+    predicted_captcha
+)
+
+
+if actual_captcha == predicted_captcha:
+
+    print(
+        "\nResult: CAPTCHA recognized successfully!"
+    )
+
+else:
+
+    print(
+        "\nResult: Prediction was incorrect."
+    )
+
+
+# -----------------------------
+# Step 22: Save the Model
+# -----------------------------
+
+MODEL_FILE = "captcha_svm_model.pkl"
+
+joblib.dump(
+    model,
+    MODEL_FILE
+)
+
+print(
+    "\nModel saved successfully as:",
+    MODEL_FILE
+)
+
+
+# -----------------------------
+# Step 23: Save Dataset CSV
+# -----------------------------
+
+CSV_FILE = "captcha_dataset.csv"
+
+dataset_df.to_csv(
+    CSV_FILE,
+    index=False
+)
+
+print(
+    "Dataset information saved as:",
+    CSV_FILE
+)
+
+
+# -----------------------------
+# END OF EXPERIMENT
+# -----------------------------
+
+print("\nExperiment completed successfully!")
